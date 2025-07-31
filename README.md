@@ -40,6 +40,7 @@ python setup_benchmark.py
 ```bash
 brew install hyperfine
 brew install diskus
+cargo build --release
 hyperfine --warmup 3 --min-runs 3 'du -sh temp/deep' 'diskus temp/deep' './target/release/dumac temp/deep'
 ```
 

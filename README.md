@@ -6,6 +6,8 @@ Uses tokio tasks and [getattrlistbulk](https://man.freebsd.org/cgi/man.cgi?query
 
 <br>
 
+## Benchmarks
+
 ```
 hyperfine --warmup 3 --min-runs 3 'du -sh temp/deep' 'diskus temp/deep' './target/release/dumac temp/deep'
 Benchmark 1: du -sh temp/deep
@@ -51,3 +53,10 @@ hyperfine --warmup 3 --min-runs 3 'du -sh temp/deep' 'diskus temp/deep' './targe
 <img src="https://github.com/healeycodes/dumac/blob/main/flamegraph.svg" alt="cargo flamegraph of the benchmark.">
 
 
+<br>
+
+## Tests
+
+```
+cargo test
+```

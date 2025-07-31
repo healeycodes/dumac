@@ -43,6 +43,14 @@ fn shard_for_inode(inode: u64) -> usize {
     (inode % SHARD_COUNT as u64) as usize
 }
 
+// Clear all seen inodes (for testing)
+#[cfg(test)]
+pub fn clear_seen_inodes() {
+    for shard in SEEN_INODES.iter() {
+        shard.lock().unwrap().clear();
+    }
+}
+
 // Returns the blocks to add (blocks if newly seen, 0 if already seen)
 fn check_and_add_inode(inode: u64, blocks: i64) -> i64 {
     let shard_idx = shard_for_inode(inode);
@@ -107,7 +115,7 @@ async fn main() {
 }
 
 // Calculate total size recursively
-fn calculate_size(root_dir: String) -> Pin<Box<dyn Future<Output = Result<i64, String>> + Send>> {
+pub fn calculate_size(root_dir: String) -> Pin<Box<dyn Future<Output = Result<i64, String>> + Send>> {
     Box::pin(async move {
         // Get directory contents
         let dir_info = tokio::task::spawn_blocking({

@@ -7,5 +7,8 @@ edition = "2021"
 libc = "0.2.174"
 tokio = { version = "1.47", features = ["full"] }
 
+[dev-dependencies]
+tempfile = "3.8"
+
 [profile.release]
 debug = true

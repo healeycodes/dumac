@@ -45,8 +45,8 @@ hyperfine --warmup 3 --min-runs 3 'du -sh temp/deep' 'diskus temp/deep' './targe
 
 <br>
 
-`cargo flamegraph` of the "deep" benchmark:
+`cargo flamegraph` of the "deep" benchmark; 91% of time spent on the optimal syscalls with 9% of scheduling overhead.
 
 <img src="https://github.com/healeycodes/dumac/blob/main/flamegraph.svg" alt="cargo flamegraph of the benchmark.">
 
-91% of time spent on the optimal syscalls with 9% of scheduling overhead.
+

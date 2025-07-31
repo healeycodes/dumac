@@ -1,0 +1,11 @@
+[package]
+name = "dumac"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2.174"
+tokio = { version = "1.47", features = ["full"] }
+
+[profile.release]
+debug = true

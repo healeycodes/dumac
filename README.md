@@ -4,11 +4,24 @@
 
 A very fast `du -sh` clone for macOS. Maybe the fastest.
 
-Uses tokio tasks and [getattrlistbulk](https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5).
+`dumac` calculates the size of a given directory.
+
+It's a parallelized version of `du -sh` and uses highly efficient macOS syscalls ([getattrlistbulk](https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5) – avaliable since Mac OS X 10.10).
+
+```bash
+dumac /tmp/
+11.5K   /tmp/
+```
 
 <br>
 
 ## Benchmarks
+
+It has been benchmarked (and beats) against most of the tools that come up when you search "disk usage CLI for macOS" but the fairest comparisons are `du` and `diskus` because they don't generate other output.
+
+My benchmark is a directory with 12 levels, 100 small files per level, with a branching factor of two — 4095 directories, 409500 files.
+
+It's ran with a warm disk cache as I found that warm disk cache performance strongly correlates with cold disk cache performance on macOS with modern Apple hardware.
 
 ```
 hyperfine --warmup 3 --min-runs 3 'du -sh temp/deep' 'diskus temp/deep' './target/release/dumac temp/deep'

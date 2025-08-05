@@ -213,56 +213,31 @@ func main() {
 	}
 	rootDir := os.Args[1]
 
-	ch := make(chan Result)
-	printCh := make(chan string)
-	go handleDir(rootDir, ch, printCh)
-
-	go func() {
-		for print := range printCh {
-			fmt.Print(print)
-		}
-	}()
-
-	dirTree := <-ch
-	if dirTree.error != nil {
-		fmt.Println("Error:", dirTree.error)
-		os.Exit(1)
-	}
+	ch := make(chan int64)
+	go handleDir(rootDir, ch)
+	size := <-ch
+	fmt.Println(size)
 }
 
-type Result struct {
-	error    error
-	path     string
-	size     int64
-	children []Result
-}
-
-func handleDir(rootDir string, ch chan Result, printCh chan string) {
+func handleDir(rootDir string, ch chan int64) {
 	info, err := getDirInfo(rootDir)
 	if err != nil {
-		ch <- Result{error: fmt.Errorf("failed to read directory: %s: %v", rootDir, err)}
-		return
+		panic(err)
 	}
 
-	dirTree := Result{
-		path:     rootDir,
-		size:     info.TotalBlocks,
-		children: make([]Result, 0, len(info.Subdirs)),
-	}
+	size := info.TotalBlocks
 
-	childCh := make(chan Result)
+	childCh := make(chan int64)
 	if len(info.Subdirs) > 0 {
 		for _, subdir := range info.Subdirs {
-			go handleDir(filepath.Join(rootDir, subdir), childCh, printCh)
+			go handleDir(filepath.Join(rootDir, subdir), childCh)
 		}
 	}
 
 	for range len(info.Subdirs) {
-		child := <-childCh
-		dirTree.children = append(dirTree.children, child)
-		dirTree.size += child.size
+		childSize := <-childCh
+		size += childSize
 	}
 
-	printCh <- fmt.Sprintf("%d\t%s\n", dirTree.size, dirTree.path)
-	ch <- dirTree
+	ch <- size
 }

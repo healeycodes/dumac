@@ -14,8 +14,8 @@ const VREG: u32 = 1;
 const VDIR: u32 = 2;
 const VLNK: u32 = 5;
 
-// Concurrency limiting
-const MAX_CONCURRENT: usize = 64;
+// Concurrency limiting (256 is default max on macOS minus some padding)
+const MAX_CONCURRENT: usize = 254;
 
 // Sharded inode tracking
 const SHARD_COUNT: usize = 128;
@@ -37,6 +37,11 @@ struct DirInfo {
 // Global sharded inode set for hardlink deduplication
 static SEEN_INODES: LazyLock<[Mutex<HashSet<u64>>; SHARD_COUNT]> = LazyLock::new(|| {
     std::array::from_fn(|_| Mutex::new(HashSet::new()))
+});
+
+// Global semaphore for concurrency control
+static GLOBAL_SEMAPHORE: LazyLock<Arc<Semaphore>> = LazyLock::new(|| {
+    Arc::new(Semaphore::new(MAX_CONCURRENT))
 });
 
 fn shard_for_inode(inode: u64) -> usize {
@@ -117,11 +122,13 @@ async fn main() {
 // Calculate total size recursively
 pub fn calculate_size(root_dir: String) -> Pin<Box<dyn Future<Output = Result<i64, String>> + Send>> {
     Box::pin(async move {
-        // Get directory contents
+        // Get directory contents with concurrency limiting
+        let _permit = GLOBAL_SEMAPHORE.acquire().await.unwrap();
         let dir_info = tokio::task::spawn_blocking({
             let root_dir = root_dir.clone();
             move || get_dir_info(&root_dir)
         }).await.map_err(|_| "task join error".to_string())??;
+        drop(_permit); // Release permit as soon as directory reading is done
         
         let mut total_size = 0i64;
         
@@ -130,16 +137,12 @@ pub fn calculate_size(root_dir: String) -> Pin<Box<dyn Future<Output = Result<i6
             total_size += check_and_add_inode(file.inode, file.blocks);
         }
         
-        // Process subdirectories concurrently with limiting
+        // Process subdirectories concurrently
         if !dir_info.subdirs.is_empty() {
-            let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
-            
             let futures: Vec<_> = dir_info.subdirs.into_iter()
                 .map(|subdir| {
-                    let semaphore = semaphore.clone();
                     let subdir_path = Path::new(&root_dir).join(&subdir).to_string_lossy().to_string();
                     tokio::spawn(async move {
-                        let _permit = semaphore.acquire().await.unwrap();
                         calculate_size(subdir_path).await
                     })
                 })

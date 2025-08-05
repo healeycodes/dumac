@@ -14,8 +14,10 @@ const VREG: u32 = 1;
 const VDIR: u32 = 2;
 const VLNK: u32 = 5;
 
-// Concurrency limiting (256 is default max on macOS minus some padding)
-const MAX_CONCURRENT: usize = 254;
+// Concurrency limiting
+// 256 is default max on macOS.
+// We allow 32 file handles to be used before dumac is called
+const MAX_CONCURRENT: usize = 224;
 
 // Sharded inode tracking
 const SHARD_COUNT: usize = 128;

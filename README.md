@@ -26,21 +26,21 @@ It's ran with a warm disk cache as I found that warm disk cache performance stro
 ```
 hyperfine --warmup 3 --min-runs 3 'du -sh temp/deep' 'diskus temp/deep' './target/release/dumac temp/deep'
 Benchmark 1: du -sh temp/deep
-  Time (mean ± σ):      3.330 s ±  0.220 s    [User: 0.040 s, System: 1.339 s]
-  Range (min … max):    3.115 s …  3.554 s    3 runs
+  Time (mean ± σ):      2.484 s ±  0.013 s    [User: 0.039 s, System: 0.886 s]
+  Range (min … max):    2.470 s …  2.496 s    3 runs
 
 Benchmark 2: diskus temp/deep
-  Time (mean ± σ):      1.342 s ±  0.068 s    [User: 0.438 s, System: 7.728 s]
-  Range (min … max):    1.272 s …  1.408 s    3 runs
+  Time (mean ± σ):      1.803 s ±  0.148 s    [User: 0.396 s, System: 9.408 s]
+  Range (min … max):    1.636 s …  1.917 s    3 runs
 
 Benchmark 3: ./target/release/dumac temp/deep
-  Time (mean ± σ):     521.0 ms ±  24.1 ms    [User: 114.4 ms, System: 2424.5 ms]
-  Range (min … max):   493.2 ms … 560.6 ms    6 runs
+  Time (mean ± σ):     541.9 ms ±  14.0 ms    [User: 110.6 ms, System: 2589.1 ms]
+  Range (min … max):   520.3 ms … 559.4 ms    5 runs
 
 Summary
   ./target/release/dumac temp/deep ran
-    2.58 ± 0.18 times faster than diskus temp/deep
-    6.39 ± 0.52 times faster than du -sh temp/deep
+    3.33 ± 0.29 times faster than diskus temp/deep
+    4.58 ± 0.12 times faster than du -sh temp/deep
 ```
 
 <br>

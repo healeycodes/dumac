@@ -104,19 +104,19 @@ async fn main() {
     let args: Vec<String> = env::args().collect();
     
     if args.len() < 2 {
-        eprintln!("usage: {} directory", args[0]);
+        eprintln!("usage: {} <directory> [<directory>...]", args[0]);
         std::process::exit(1);
     }
     
-    let root_dir = &args[1];
-    
-    match calculate_size(root_dir.clone()).await {
-        Ok(total_blocks) => {
-            println!("{}\t{}", format_size(total_blocks), root_dir);
-        },
-        Err(e) => {
-            eprintln!("{}: {}", args[0], e);
-            std::process::exit(1);
+    for root_dir in args.iter().skip(1) {
+        match calculate_size(root_dir.clone()).await {
+            Ok(total_blocks) => {
+                println!("{}\t{}", format_size(total_blocks), root_dir);
+            },
+            Err(e) => {
+                eprintln!("{}: {}", args[0], e);
+                std::process::exit(1);
+            }
         }
     }
 }

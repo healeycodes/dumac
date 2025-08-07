@@ -9,8 +9,8 @@ mod main;
 
 use main::calculate_size;
 
-#[tokio::test]
-async fn test_basic_file_size_calculation() {
+#[test]
+fn test_basic_file_size_calculation() {
     // Clear the seen inodes cache to ensure test isolation
     main::clear_seen_inodes();
     
@@ -29,7 +29,7 @@ async fn test_basic_file_size_calculation() {
     drop(file);
     
     // Calculate size
-    let result = calculate_size(temp_path.to_string_lossy().to_string()).await;
+    let result = calculate_size(temp_path.to_string_lossy().to_string());
     assert!(result.is_ok(), "calculate_size should succeed");
     
     let total_blocks = result.unwrap();
@@ -41,8 +41,8 @@ async fn test_basic_file_size_calculation() {
     // Cleanup happens automatically when TempDir is dropped
 }
 
-#[tokio::test]
-async fn test_nested_directories() {
+#[test]
+fn test_nested_directories() {
     // Clear the seen inodes cache to ensure test isolation
     main::clear_seen_inodes();
     
@@ -65,7 +65,7 @@ async fn test_nested_directories() {
     drop(file2);
     
     // Calculate total size
-    let result = calculate_size(temp_path.to_string_lossy().to_string()).await;
+    let result = calculate_size(temp_path.to_string_lossy().to_string());
     assert!(result.is_ok(), "calculate_size should succeed for nested dirs");
     
     let total_blocks = result.unwrap();
@@ -73,8 +73,8 @@ async fn test_nested_directories() {
     assert!(total_blocks >= 2, "Should have at least 2 blocks for two files, got {}", total_blocks);
 }
 
-#[tokio::test]
-async fn test_hardlink_deduplication() {
+#[test]
+fn test_hardlink_deduplication() {
     // Clear the seen inodes cache to ensure test isolation
     main::clear_seen_inodes();
     
@@ -92,7 +92,7 @@ async fn test_hardlink_deduplication() {
     drop(file);
     
     // Calculate size with just the original file
-    let size_original = calculate_size(temp_path.to_string_lossy().to_string()).await
+    let size_original = calculate_size(temp_path.to_string_lossy().to_string())
         .expect("Failed to calculate size for original");
     
     // Create hard link to the same file
@@ -108,7 +108,7 @@ async fn test_hardlink_deduplication() {
     main::clear_seen_inodes();
     
     // Calculate size again - should be the same due to deduplication
-    let size_with_hardlink = calculate_size(temp_path.to_string_lossy().to_string()).await
+    let size_with_hardlink = calculate_size(temp_path.to_string_lossy().to_string())
         .expect("Failed to calculate size with hardlink");
     
     // The total size should be the same because hardlinks should be deduplicated

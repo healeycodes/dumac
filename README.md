@@ -1,5 +1,7 @@
 # dumac
-> My blog post: [Maybe the Fastest Disk Usage Program on macOS](https://healeycodes.com/maybe-the-fastest-disk-usage-program-on-macos)
+> My blog posts:
+> - [Maybe the Fastest Disk Usage Program on macOS](https://healeycodes.com/maybe-the-fastest-disk-usage-program-on-macos)
+> - [Optimizing My Disk Usage Program](https://healeycodes.com/optimizing-my-disk-usage-program)
 <br>
 
 A very fast `du -sh` clone for macOS. Maybe the fastest.

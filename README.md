@@ -8,6 +8,14 @@ A very fast `du -sh` clone for macOS. Maybe the fastest.
 
 `dumac` calculates the size of a given directory.
 
+It uses up to six workers by default, which performs best for the metadata-heavy
+workload. Set `DUMAC_THREADS` to select a different worker count when profiling a
+specific storage device or workload:
+
+```bash
+DUMAC_THREADS=12 dumac /tmp/
+```
+
 It's a parallelized version of `du -sh` and uses highly efficient macOS syscalls ([getattrlistbulk](https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5) – avaliable since Mac OS X 10.10).
 
 ```bash

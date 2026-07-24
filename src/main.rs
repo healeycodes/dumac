@@ -15,6 +15,7 @@ const VLNK: u32 = 5;
 
 // Max file handles open
 const MAX_FILE_HANDLES: usize = 224;
+const DEFAULT_THREADS: usize = 6;
 
 // Sharded inode tracking
 const SHARD_COUNT: usize = 128;
@@ -115,15 +116,21 @@ fn main() {
 
     let root_dir = &args[1];
 
-    let max_threads = std::thread::available_parallelism()
+    let available_threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1)
         // Limit to MAX_FILE_HANDLES to avoid file handle limit errors
         .min(MAX_FILE_HANDLES);
+    let thread_count = env::var("DUMAC_THREADS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|&value| value > 0)
+        .map(|value| value.min(MAX_FILE_HANDLES))
+        .unwrap_or_else(|| available_threads.min(DEFAULT_THREADS));
     let pool = rayon::ThreadPoolBuilder::new()
         // Larger than default stack size to handle deep directory trees
         .stack_size(16 * 1024 * 1024)
-        .num_threads(max_threads)
+        .num_threads(thread_count)
         .build()
         .expect("Failed to build thread pool");
 
@@ -145,16 +152,12 @@ pub fn calculate_size(root_dir: String) -> Result<i64, String> {
     // Get directory contents
     let dir_info = get_dir_info(&root_dir)?;
 
-    let mut all_inodes = Vec::new();
-
     // Process files in this directory, deduplicating by inode
     let total_size: i64 = dir_info
         .files
         .iter()
         .map(|file| {
-            let blocks = check_and_add_inode(file.inode, file.blocks);
-            all_inodes.push(file.inode);
-            blocks
+            check_and_add_inode(file.inode, file.blocks)
         })
         .sum();
 

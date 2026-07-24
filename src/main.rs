@@ -1,10 +1,19 @@
+use fsevent_stream::ffi::{
+    kFSEventStreamCreateFlagFileEvents, kFSEventStreamCreateFlagNoDefer, FSEventsGetCurrentEventId,
+};
+use fsevent_stream::flags::StreamFlags;
+use fsevent_stream::stream::create_event_stream;
+use futures_util::StreamExt;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::CString;
+use std::fs;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 // macOS-specific constants not in libc crate
 const ATTR_CMN_ERROR: u32 = 0x20000000;
@@ -42,8 +51,7 @@ fn shard_for_inode(inode: u64) -> usize {
     ((inode >> 8) % SHARD_COUNT as u64) as usize
 }
 
-// Clear all seen inodes (for testing)
-#[cfg(test)]
+// Clear all seen inodes before a new scan.
 pub fn clear_seen_inodes() {
     for shard in SEEN_INODES.iter() {
         shard.lock().clear();
@@ -106,15 +114,113 @@ fn format_size(blocks: i64) -> String {
 fn is_dot_or_dotdot(filename: &str) -> bool {
     filename == "." || filename == ".."
 }
+
+#[derive(Debug)]
+struct CacheEntry {
+    blocks: i64,
+    event_id: u64,
+}
+
+fn cache_file(root: &Path) -> std::path::PathBuf {
+    let hash = root
+        .as_os_str()
+        .as_bytes()
+        .iter()
+        .fold(0xcbf29ce484222325_u64, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        });
+    env::temp_dir()
+        .join("dumac-cache")
+        .join(format!("{hash:016x}"))
+}
+
+fn read_cache(root: &Path) -> Option<CacheEntry> {
+    let contents = fs::read_to_string(cache_file(root)).ok()?;
+    let mut fields = contents.lines();
+    let event_id = fields.next()?.parse().ok()?;
+    let blocks = fields.next()?.parse().ok()?;
+    let cached_root = fields.next()?.to_owned();
+    (cached_root == root.to_string_lossy()).then_some(CacheEntry { blocks, event_id })
+}
+
+fn write_cache(root: &Path, blocks: i64, event_id: u64) {
+    let file = cache_file(root);
+    if let Some(parent) = file.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(
+        file,
+        format!("{event_id}\n{blocks}\n{}\n", root.to_string_lossy()),
+    );
+}
+
+async fn changed_since(root: &Path, event_id: u64) -> bool {
+    let flags = kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents;
+    let Ok((stream, mut handler)) = create_event_stream([root], event_id, Duration::ZERO, flags)
+    else {
+        return true;
+    };
+    let mut events = stream.into_flatten();
+    let changed = loop {
+        match tokio::time::timeout(Duration::from_secs(2), events.next()).await {
+            Ok(Some(event)) if event.flags.contains(StreamFlags::HISTORY_DONE) => break false,
+            Ok(Some(_)) | Ok(None) | Err(_) => break true,
+        }
+    };
+    handler.abort();
+    changed
+}
+
+fn cache_changed(root: &Path, event_id: u64) -> bool {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .map_or(true, |runtime| {
+            runtime.block_on(changed_since(root, event_id))
+        })
+}
+
+fn calculate_with_pool(pool: &rayon::ThreadPool, root: String) -> Result<i64, String> {
+    clear_seen_inodes();
+    pool.install(|| calculate_size(root))
+}
+
+fn cached_or_calculate(pool: &rayon::ThreadPool, root: &Path) -> Result<(i64, bool), String> {
+    if let Some(entry) = read_cache(root) {
+        if !cache_changed(root, entry.event_id) {
+            return Ok((entry.blocks, true));
+        }
+    }
+
+    for _ in 0..2 {
+        let event_id = unsafe { FSEventsGetCurrentEventId() };
+        let blocks = calculate_with_pool(pool, root.to_string_lossy().to_string())?;
+        if !cache_changed(root, event_id) {
+            write_cache(root, blocks, event_id);
+            return Ok((blocks, false));
+        }
+    }
+
+    calculate_with_pool(pool, root.to_string_lossy().to_string()).map(|blocks| (blocks, false))
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
+    let (cache_mode, root_dir) = match args.as_slice() {
+        [_program, root_dir] => (false, root_dir),
+        [program, flag, root_dir] if flag == "--cache" => (true, root_dir),
+        [program, ..] => {
+            eprintln!("usage: {program} [--cache] directory");
+            std::process::exit(1);
+        }
+        [] => unreachable!(),
+    };
+
+    if root_dir.is_empty() {
         eprintln!("usage: {} directory", args[0]);
         std::process::exit(1);
     }
-
-    let root_dir = &args[1];
 
     let available_threads = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -134,7 +240,13 @@ fn main() {
         .build()
         .expect("Failed to build thread pool");
 
-    let result = pool.install(|| calculate_size(root_dir.clone()));
+    let result = if cache_mode {
+        fs::canonicalize(root_dir)
+            .map_err(|_| format!("{}: Cannot access directory", root_dir))
+            .and_then(|root| cached_or_calculate(&pool, &root).map(|(blocks, _)| blocks))
+    } else {
+        calculate_with_pool(&pool, root_dir.clone())
+    };
 
     match result {
         Ok(total_blocks) => {
@@ -156,9 +268,7 @@ pub fn calculate_size(root_dir: String) -> Result<i64, String> {
     let total_size: i64 = dir_info
         .files
         .iter()
-        .map(|file| {
-            check_and_add_inode(file.inode, file.blocks)
-        })
+        .map(|file| check_and_add_inode(file.inode, file.blocks))
         .sum();
 
     // Process subdirectories in parallel

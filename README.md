@@ -16,6 +16,17 @@ specific storage device or workload:
 DUMAC_THREADS=12 dumac /tmp/
 ```
 
+For repeated queries of an unchanged local directory, use `--cache`:
+
+```bash
+dumac --cache ~/project
+```
+
+The first cached run scans normally. Later runs reuse the total only after macOS
+FSEvents reports no changes beneath that directory since the scan; any change
+causes a fresh scan. Cache files live in the system temporary directory and can
+be discarded at any time.
+
 It's a parallelized version of `du -sh` and uses highly efficient macOS syscalls ([getattrlistbulk](https://man.freebsd.org/cgi/man.cgi?query=getattrlistbulk&sektion=2&manpath=macOS+13.6.5) – avaliable since Mac OS X 10.10).
 
 ```bash

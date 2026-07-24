@@ -161,11 +161,9 @@ async fn changed_since(root: &Path, event_id: u64) -> bool {
         return true;
     };
     let mut events = stream.into_flatten();
-    let changed = loop {
-        match tokio::time::timeout(Duration::from_secs(2), events.next()).await {
-            Ok(Some(event)) if event.flags.contains(StreamFlags::HISTORY_DONE) => break false,
-            Ok(Some(_)) | Ok(None) | Err(_) => break true,
-        }
+    let changed = match tokio::time::timeout(Duration::from_secs(2), events.next()).await {
+        Ok(Some(event)) if event.flags.contains(StreamFlags::HISTORY_DONE) => false,
+        Ok(Some(_)) | Ok(None) | Err(_) => true,
     };
     handler.abort();
     changed
@@ -315,7 +313,7 @@ fn get_dir_info(path: &str) -> Result<DirInfo, String> {
 
     // Set up attribute list for getattrlistbulk
     let mut attrlist = libc::attrlist {
-        bitmapcount: libc::ATTR_BIT_MAP_COUNT as u16,
+        bitmapcount: libc::ATTR_BIT_MAP_COUNT,
         reserved: 0,
         commonattr: libc::ATTR_CMN_RETURNED_ATTRS
             | libc::ATTR_CMN_NAME
@@ -426,15 +424,13 @@ fn get_dir_info(path: &str) -> Result<DirInfo, String> {
 
                 // Handle different file types
                 match obj_type {
-                    VREG => {
+                    VREG if returned_attrs.fileattr & libc::ATTR_FILE_ALLOCSIZE != 0 => {
                         // Regular file - get allocation size
-                        if returned_attrs.fileattr & libc::ATTR_FILE_ALLOCSIZE != 0 {
-                            let alloc_size = std::ptr::read_unaligned(field_ptr as *const i64);
-                            files.push(FileInfo {
-                                blocks: blocks_from_bytes(alloc_size),
-                                inode,
-                            });
-                        }
+                        let alloc_size = std::ptr::read_unaligned(field_ptr as *const i64);
+                        files.push(FileInfo {
+                            blocks: blocks_from_bytes(alloc_size),
+                            inode,
+                        });
                     }
                     VDIR => {
                         // Directory - add to subdirectories list

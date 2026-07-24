@@ -56,6 +56,19 @@ python setup_benchmark.py
 
 <br>
 
+To create a package-manager-shaped fixture with nested package paths, generated
+files, hard-linked licenses, and executable symlinks:
+
+```bash
+python setup_benchmark.py --workload package
+hyperfine --warmup 3 --min-runs 3 './target/release/dumac temp/package'
+```
+
+Use `--packages`, `--files-per-package`, and `--generated-files` to scale that
+fixture for the storage device under test.
+
+<br>
+
 ```bash
 brew install hyperfine
 brew install diskus

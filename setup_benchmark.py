@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
 import sys
 import subprocess
@@ -17,6 +18,10 @@ WIDE_FILES_PER_DIR = 500
 DEEP_TOTAL_LEVELS = 12
 DEEP_FILES_PER_LEVEL = 100
 DEEP_BRANCHING_FACTOR = 2  # Number of subdirectories per level
+
+PACKAGE_COUNT = 250
+PACKAGE_FILES_PER_PACKAGE = 32
+PACKAGE_GENERATED_FILES = 16
 
 # Global semaphore to limit concurrent file operations (initialized in main)
 FILE_SEMAPHORE = None
@@ -175,20 +180,113 @@ async def create_deep_benchmark(base_dir):
     print(f"Deep branching benchmark complete: {total_levels} levels, {dirs_created:,} directories, {total_files:,} files")
     return bench_dir
 
-async def main():
+async def create_package_benchmark(base_dir, package_count, files_per_package, generated_files):
+    """Create a package-manager-shaped tree with hard links and symlinks."""
+    bench_dir = base_dir / "package"
+
+    if bench_dir.exists() and any(bench_dir.iterdir()):
+        print(f"Package benchmark already exists in {bench_dir}, skipping creation...")
+        return bench_dir
+
+    store_dir = bench_dir / ".store"
+    modules_dir = bench_dir / "node_modules"
+    shared_license = store_dir / "LICENSE"
+    await asyncio.to_thread(store_dir.mkdir, parents=True, exist_ok=True)
+    await asyncio.to_thread(modules_dir.mkdir, parents=True, exist_ok=True)
+    await create_file_async(shared_license, b"shared package license\n")
+
+    print(f"Creating package benchmark in {bench_dir}...")
+    print(
+        f"This will create {package_count:,} packages with "
+        f"{files_per_package + generated_files + 4:,} files each..."
+    )
+
+    for package_index in range(package_count):
+        scope = f"scope{package_index % 20}"
+        package = f"package{package_index}"
+        package_dir = (
+            modules_dir
+            / ".pnpm"
+            / f"{scope}+{package}@1.0.0"
+            / "node_modules"
+            / scope
+            / package
+        )
+        generated_dir = package_dir / "dist" / "generated"
+        await asyncio.to_thread(generated_dir.mkdir, parents=True, exist_ok=True)
+
+        file_tasks = [
+            create_file_async(package_dir / "package.json", b'{"name":"benchmark-package"}\n'),
+            create_file_async(package_dir / "index.js", b"module.exports = 1;\n"),
+            create_file_async(package_dir / "README.md", b"benchmark package\n"),
+        ]
+        file_tasks.extend(
+            create_file_async(package_dir / f"source-{file_index}.js", b"export default 1;\n")
+            for file_index in range(files_per_package)
+        )
+        file_tasks.extend(
+            create_file_async(generated_dir / f"module-{file_index}.js", b"export const value = 1;\n")
+            for file_index in range(generated_files)
+        )
+        await asyncio.gather(*file_tasks)
+        await asyncio.to_thread(os.link, shared_license, package_dir / "LICENSE")
+
+        bin_dir = modules_dir / ".bin"
+        await asyncio.to_thread(bin_dir.mkdir, exist_ok=True)
+        bin_path = bin_dir / package
+        relative_target = (
+            Path("..")
+            / ".pnpm"
+            / f"{scope}+{package}@1.0.0"
+            / "node_modules"
+            / scope
+            / package
+            / "index.js"
+        )
+        await asyncio.to_thread(os.symlink, relative_target, bin_path)
+
+        if (package_index + 1) % max(package_count // 4, 1) == 0:
+            print(f"  Created {package_index + 1:,}/{package_count:,} packages...")
+
+    print(f"Package benchmark complete: {package_count:,} packages")
+    return bench_dir
+
+async def main(args):
     global FILE_SEMAPHORE
     FILE_SEMAPHORE = asyncio.Semaphore(200)
 
     temp_dir = Path("temp")
     temp_dir.mkdir(exist_ok=True)
     
-    # Create the two intensive benchmark scenarios
+    # Create selected benchmark scenarios.
     print("\nSetting up benchmark scenarios...")
-    
-    await create_wide_benchmark(temp_dir)
-    await create_deep_benchmark(temp_dir) 
+
+    if "wide" in args.workload:
+        await create_wide_benchmark(temp_dir)
+    if "deep" in args.workload:
+        await create_deep_benchmark(temp_dir)
+    if "package" in args.workload:
+        await create_package_benchmark(
+            temp_dir,
+            args.packages,
+            args.files_per_package,
+            args.generated_files,
+        )
     
     print("\nBenchmark setup complete.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Create dumac benchmark fixtures")
+    parser.add_argument(
+        "--workload",
+        action="append",
+        choices=("wide", "deep", "package"),
+        help="fixture to create; repeat to select multiple fixtures",
+    )
+    parser.add_argument("--packages", type=int, default=PACKAGE_COUNT)
+    parser.add_argument("--files-per-package", type=int, default=PACKAGE_FILES_PER_PACKAGE)
+    parser.add_argument("--generated-files", type=int, default=PACKAGE_GENERATED_FILES)
+    args = parser.parse_args()
+    if args.workload is None:
+        args.workload = ["wide", "deep"]
+    asyncio.run(main(args))

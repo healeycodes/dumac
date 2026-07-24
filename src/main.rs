@@ -27,7 +27,7 @@ const MAX_FILE_HANDLES: usize = 224;
 const DEFAULT_THREADS: usize = 6;
 
 // Sharded inode tracking
-const SHARD_COUNT: usize = 128;
+const SHARD_COUNT: usize = 32;
 
 // File information for size calculation
 #[derive(Debug)]

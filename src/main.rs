@@ -156,9 +156,7 @@ pub fn calculate_size(root_dir: String) -> Result<i64, String> {
     let total_size: i64 = dir_info
         .files
         .iter()
-        .map(|file| {
-            check_and_add_inode(file.inode, file.blocks)
-        })
+        .map(|file| check_and_add_inode(file.inode, file.blocks))
         .sum();
 
     // Process subdirectories in parallel
@@ -205,7 +203,7 @@ fn get_dir_info(path: &str) -> Result<DirInfo, String> {
 
     // Set up attribute list for getattrlistbulk
     let mut attrlist = libc::attrlist {
-        bitmapcount: libc::ATTR_BIT_MAP_COUNT as u16,
+        bitmapcount: libc::ATTR_BIT_MAP_COUNT,
         reserved: 0,
         commonattr: libc::ATTR_CMN_RETURNED_ATTRS
             | libc::ATTR_CMN_NAME
@@ -316,15 +314,13 @@ fn get_dir_info(path: &str) -> Result<DirInfo, String> {
 
                 // Handle different file types
                 match obj_type {
-                    VREG => {
+                    VREG if returned_attrs.fileattr & libc::ATTR_FILE_ALLOCSIZE != 0 => {
                         // Regular file - get allocation size
-                        if returned_attrs.fileattr & libc::ATTR_FILE_ALLOCSIZE != 0 {
-                            let alloc_size = std::ptr::read_unaligned(field_ptr as *const i64);
-                            files.push(FileInfo {
-                                blocks: blocks_from_bytes(alloc_size),
-                                inode,
-                            });
-                        }
+                        let alloc_size = std::ptr::read_unaligned(field_ptr as *const i64);
+                        files.push(FileInfo {
+                            blocks: blocks_from_bytes(alloc_size),
+                            inode,
+                        });
                     }
                     VDIR => {
                         // Directory - add to subdirectories list

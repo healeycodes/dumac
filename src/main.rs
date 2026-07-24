@@ -13,8 +13,11 @@ const VREG: u32 = 1;
 const VDIR: u32 = 2;
 const VLNK: u32 = 5;
 
-// Max file handles open
+// Maximum configured worker count.
 const MAX_FILE_HANDLES: usize = 224;
+
+// getattrlistbulk saturates the kernel before all logical CPUs are useful.
+const DEFAULT_THREADS: usize = 6;
 
 // Sharded inode tracking
 const SHARD_COUNT: usize = 128;
@@ -115,10 +118,17 @@ fn main() {
 
     let root_dir = &args[1];
 
-    let max_threads = std::thread::available_parallelism()
+    let default_threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1)
-        // Limit to MAX_FILE_HANDLES to avoid file handle limit errors
+        // Bound automatic worker count for metadata enumeration.
+        .min(MAX_FILE_HANDLES)
+        .min(DEFAULT_THREADS);
+    let max_threads = env::var("DUMAC_THREADS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|&threads| threads > 0)
+        .unwrap_or(default_threads)
         .min(MAX_FILE_HANDLES);
     let pool = rayon::ThreadPoolBuilder::new()
         // Larger than default stack size to handle deep directory trees

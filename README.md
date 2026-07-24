@@ -15,6 +15,10 @@ dumac /tmp/
 11.5K   /tmp/
 ```
 
+`dumac` defaults to six workers, which avoids contention in macOS metadata
+enumeration. Override it for a particular filesystem with `DUMAC_THREADS`, for
+example `DUMAC_THREADS=8 dumac /tmp/`.
+
 <br>
 
 ## Benchmarks

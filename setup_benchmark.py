@@ -19,7 +19,7 @@ DEEP_TOTAL_LEVELS = 12
 DEEP_FILES_PER_LEVEL = 100
 DEEP_BRANCHING_FACTOR = 2  # Number of subdirectories per level
 
-PACKAGE_COUNT = 250
+PACKAGE_COUNT = 1_500
 PACKAGE_FILES_PER_PACKAGE = 32
 PACKAGE_GENERATED_FILES = 16
 
@@ -190,9 +190,11 @@ async def create_package_benchmark(base_dir, package_count, files_per_package, g
 
     store_dir = bench_dir / ".store"
     modules_dir = bench_dir / "node_modules"
+    bin_dir = modules_dir / ".bin"
     shared_license = store_dir / "LICENSE"
     await asyncio.to_thread(store_dir.mkdir, parents=True, exist_ok=True)
     await asyncio.to_thread(modules_dir.mkdir, parents=True, exist_ok=True)
+    await asyncio.to_thread(bin_dir.mkdir, exist_ok=True)
     await create_file_async(shared_license, b"shared package license\n")
 
     print(f"Creating package benchmark in {bench_dir}...")
@@ -231,8 +233,6 @@ async def create_package_benchmark(base_dir, package_count, files_per_package, g
         await asyncio.gather(*file_tasks)
         await asyncio.to_thread(os.link, shared_license, package_dir / "LICENSE")
 
-        bin_dir = modules_dir / ".bin"
-        await asyncio.to_thread(bin_dir.mkdir, exist_ok=True)
         bin_path = bin_dir / package
         relative_target = (
             Path("..")

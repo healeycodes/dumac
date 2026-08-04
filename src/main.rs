@@ -313,8 +313,11 @@ fn get_dir_info(path: &str) -> Result<DirInfo, String> {
 
                 // Handle different file types
                 match obj_type {
-                    VREG => {
-                        // Regular file - get allocation size
+                    VREG | VLNK => {
+                        // File attributes cover every non-directory object, symlinks
+                        // included, so use the reported allocation rather than assuming
+                        // a block per link. APFS stores short targets inline and reports
+                        // zero, which is what du counts.
                         if returned_attrs.fileattr & libc::ATTR_FILE_ALLOCSIZE != 0 {
                             let alloc_size = std::ptr::read_unaligned(field_ptr as *const i64);
                             files.push(FileInfo {
@@ -328,10 +331,6 @@ fn get_dir_info(path: &str) -> Result<DirInfo, String> {
                         if let Some(name) = filename {
                             subdirs.push(name);
                         }
-                    }
-                    VLNK => {
-                        // Symlink - count the link itself as 1 (du default behavior)
-                        files.push(FileInfo { blocks: 1, inode });
                     }
                     _ => {
                         // Other file types (devices, etc.) - treat as zero-size

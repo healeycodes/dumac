@@ -122,4 +122,40 @@ fn test_hardlink_deduplication() {
     
     // Verify the original size is reasonable (at least 4 blocks for 2048 bytes)
     assert!(size_original >= 4, "Should have at least 4 blocks for 2048 bytes, got {}", size_original);
-} 
+}
+
+#[test]
+fn test_symlinks_report_allocated_size() {
+    main::clear_seen_inodes();
+
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let temp_path = temp_dir.path();
+
+    let links: Vec<_> = (0..100)
+        .map(|i| {
+            let link = temp_path.join(format!("link_{}", i));
+            std::os::unix::fs::symlink(format!("/some/target/path/file_{}", i), &link)
+                .expect("Failed to create symlink");
+            link
+        })
+        .collect();
+
+    // du counts a symlink's own st_blocks, which is 0 where the filesystem stores
+    // short targets inline. Derive the expectation so this holds off APFS too.
+    let expected_blocks: i64 = links
+        .iter()
+        .map(|link| {
+            fs::symlink_metadata(link)
+                .expect("Failed to stat symlink")
+                .blocks() as i64
+        })
+        .sum();
+
+    let total_blocks = calculate_size(temp_path.to_string_lossy().to_string())
+        .expect("calculate_size should succeed");
+
+    assert_eq!(
+        total_blocks, expected_blocks,
+        "symlinks should contribute their real allocated size, not a fixed block each"
+    );
+}

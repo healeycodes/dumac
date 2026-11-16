@@ -12,8 +12,38 @@ It's a parallelized version of `du -sh` and uses highly efficient macOS syscalls
 
 ```bash
 dumac /tmp/
-11.5K   /tmp/
+17714352	/tmp/
+dumac -h /tmp/
+8.4G	/tmp/
 ```
+
+Output follows `du`: block counts in 512-byte units by default (or `BLOCKSIZE` if set), and these flags change the unit, as with `du`:
+
+| Flag | Output |
+| --- | --- |
+| `-h` | human-readable, powers of 1024 (`4.0K`, `104K`, `1.0G`) |
+| `--si` | human-readable, powers of 1000 (`4.1k`, `41M`) |
+| `-k`, `-m`, `-g` | 1 KiB, 1 MiB or 1 GiB blocks |
+| `-B size` | blocks of `size` bytes; accepts `k`, `m` or `g` suffixes, e.g. `-B 4k` |
+
+`-s` is accepted for `du` compatibility (`du -sh` works as is). dumac always prints one total per path, so it has no effect. Flags can be combined (`-sh`, `-hk`), and the last size flag wins. Use `--` to end option parsing before a path that starts with a dash.
+
+Multiple paths and quoted glob patterns are supported (`*`, `?`, `[...]`, `**`). Hardlinks shared between paths are counted once.
+
+```bash
+dumac ~/Code ~/Downloads
+dumac 'target/**/build'
+```
+
+The worker pool defaults to the number of performance cores (more threads mostly contend on kernel locks). Set `DUMAC_THREADS=n` to override.
+
+On APFS, files cloned with `cp -c` (or by Xcode, Finder duplicates, etc.) share storage, but `du` and `dumac` count every clone in full. Pass `--dedupe-clones` to count the blocks shared within a clone group once. It's an estimate when clones have been edited in different places, and it applies to files found inside directories, not to file arguments.
+
+```bash
+dumac --dedupe-clones ~/Library/Developer
+```
+
+Empty directories are skipped without being opened, using the entry count APFS keeps for each directory. This is only done on writable APFS volumes and never for mount points: the sealed system volume reports firmlinks such as `/Users` as empty, so it is always walked fully.
 
 <br>
 

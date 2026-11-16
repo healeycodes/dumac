@@ -408,10 +408,12 @@ fn main() {
 
 // Size of a command line argument: directories are walked, anything else is
 // measured directly. Unreadable paths fall through to calculate_size for its error.
+// lstat, not stat: like du's default -P, a symlink operand is measured itself
+// rather than followed to its target.
 pub fn size_of_path(path: String) -> Result<i64, String> {
     let c_path = CString::new(path.as_str()).map_err(|_| format!("{}: Invalid path", path))?;
     let mut st: libc::stat = unsafe { std::mem::zeroed() };
-    if unsafe { libc::stat(c_path.as_ptr(), &mut st) } == 0
+    if unsafe { libc::lstat(c_path.as_ptr(), &mut st) } == 0
         && (st.st_mode & libc::S_IFMT) != libc::S_IFDIR
     {
         let blocks = if st.st_nlink > 1 {

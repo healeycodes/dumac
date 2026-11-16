@@ -221,6 +221,22 @@ fn test_size_of_path_file_root() {
 }
 
 #[test]
+fn test_symlink_root_is_not_followed() {
+    let _guard = serial();
+    main::clear_seen_inodes();
+    let temp_dir = TempDir::new().unwrap();
+    let target = temp_dir.path().join("target");
+    fs::create_dir(&target).unwrap();
+    write_file(&target.join("big"), 1 << 20);
+    let link = temp_dir.path().join("link");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    // Like du -P, the link contributes its own blocks, not the 1 MiB behind it
+    let blocks = size_of_path(link.to_string_lossy().to_string()).unwrap();
+    assert!(blocks < 2048, "symlink root should not be followed, got {} blocks", blocks);
+}
+
+#[test]
 fn test_hardlink_shared_across_roots_counted_once() {
     let _guard = serial();
     main::clear_seen_inodes();
